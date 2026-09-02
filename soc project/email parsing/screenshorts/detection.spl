@@ -1,0 +1,20 @@
+# ============================================
+# PHISHING EMAIL CAMPAIGN - DETECTION QUERY
+# INC-001: Fake PayPal Verification Campaign
+# INC-002: Spoofed Vendor Invoice
+# ============================================
+
+# Primary Detection: Emails failing SPF, DKIM, or DMARC authentication
+# This is the core query that flags suspicious/spoofed senders
+
+index=gmail spf="fail" OR dkim="fail" OR dmarc="fail"
+| table time, sender, recipient, subject, spf, dkim, dmarc, src_ip
+
+
+# ============================================
+# Secondary Detection: Malicious attachment identification
+# Flags any email carrying a real attachment (excludes "none" values)
+# ============================================
+
+index=gmail attachment_name!="none"
+| table time, sender, recipient, attachment_name, attachment_hash, action
