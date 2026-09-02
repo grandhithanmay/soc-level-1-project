@@ -1,0 +1,56 @@
+# ============================================
+# PHISHING EMAIL CAMPAIGN - INVESTIGATION QUERIES
+# INC-001: Fake PayPal Verification Campaign
+# INC-002: Spoofed Vendor Invoice
+# ============================================
+
+# Step 1: Confirm the full dataset loaded correctly
+index=gmail
+| stats count
+
+
+# ============================================
+# Step 2: View all fields in a readable table (baseline view)
+# ============================================
+
+index=gmail
+| table time, sender, reply_to, recipient, subject, spf, dkim, dmarc, src_ip, url, attachment_name, attachment_hash, action
+
+
+# ============================================
+# Step 3: Confirm campaign scope - same sender, multiple recipients
+# Proves this was a coordinated campaign, not a single email
+# ============================================
+
+index=gmail sender="accounts@paypa1-secure-billing.com"
+| table time, sender, recipient, subject, action
+
+
+# ============================================
+# Step 4: Find confirmed clicks - real user impact vs. just delivery
+# ============================================
+
+index=gmail action="clicked"
+| table time, sender, recipient, subject, url, attachment_name, action
+
+
+# ============================================
+# Step 5: Check Reply-To mismatches across all emails
+# A mismatch between sender and reply_to is a spoofing indicator
+# ============================================
+
+index=gmail
+| table time, sender, reply_to
+| eval mismatch=if(sender!=reply_to, "MISMATCH", "OK")
+| where mismatch="MISMATCH"
+
+
+# ============================================
+# Step 6: Final verdict + severity summary
+# Combines authentication result and user action into one triage table
+# ============================================
+
+index=gmail
+| eval verdict=if(spf="fail" OR dkim="fail" OR dmarc="fail", "SUSPICIOUS", "Legitimate")
+| eval severity=if(action="clicked", "HIGH-Clicked", "LOW-Delivered")
+| table time, sender, recipient, verdict, severity
