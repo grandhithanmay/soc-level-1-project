@@ -1,1 +1,19 @@
+# ============================================
+# SSH BRUTE-FORCE - DETECTION QUERY
+# INC-003: Confirmed Root Compromise via 203.0.113.44
+# ============================================
 
+# Primary Detection: Source IPs with 5+ failed SSH authentication attempts
+index=ssh signature_id=4625
+| stats count as failed_attempts by src_ip
+| where failed_attempts >= 5
+| sort -failed_attempts
+
+
+# ============================================
+# Secondary Detection: Confirmed compromise (fails + success on same IP)
+# ============================================
+
+index=ssh
+| stats count(eval(signature_id=4625)) as fails, count(eval(signature_id=4624)) as success by src_ip
+| where fails >= 5 AND success > 0
