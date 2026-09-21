@@ -1,1 +1,77 @@
+# ============================================
+# SSH BRUTE-FORCE - INVESTIGATION QUERIES
+# INC-003: Confirmed Root Compromise via 203.0.113.44
+# ============================================
+
+
+# ============================================
+# STEP 1: Successful Authentication Correlation
+# After identifying failed authentication activity, signature_id=4624
+# was searched for the same source IP to check for a successful logon.
+# ============================================
+
+index=ssh src_ip="203.0.113.44" signature_id=4624
+| table time, src_ip, user, signature_id, signature, logon_type_name, session_id
+
+
+# ============================================
+# STEP 2: Post-Authentication Investigation
+# Checked for suspicious activity associated with the same source IP
+# following the successful authentication.
+#
+# Note: this SSH dataset does not include Windows-equivalent events
+# (4672 privilege assignment, new process creation, new service
+# installation, registry modification, audit log clearing). In a full
+# Linux environment, the equivalent checks would be:
+#   - sudo/privilege escalation log entries
+#   - new process execution (auditd exec events)
+#   - new service creation (systemd unit changes)
+#   - modification of /etc/passwd or /etc/shadow
+#   - shell history clearing or log tampering (auth.log, .bash_history)
+# ============================================
+
+index=ssh src_ip="203.0.113.44"
+| table time, user, signature_id, signature, action
+| sort time
+
+
+# ============================================
+# STEP 3: Source IP Analysis
+# Investigated whether the source IP targeted any other user accounts
+# or other hosts beyond the confirmed compromise.
+# ============================================
+
+index=ssh src_ip="203.0.113.44"
+| stats count by user, dest_ip, dest_nt_domain
+| sort -count
+
+
+# ============================================
+# STEP 4: Failure Reason Breakdown (SSH-specific addition)
+# Distinguishes "bad password" (real account guessed) from
+# "bad username" (non-existent account) attempts for the same source IP.
+# ============================================
+
+index=ssh src_ip="203.0.113.44" signature_id=4625
+| stats count by user, sub_status, failure_reason
+
+
+# ============================================
+# STEP 5: Legitimate Traffic Cross-Check (false positive elimination)
+# Confirms the compromised host also had legitimate key-based access
+# from trusted internal IPs, unrelated to the attack.
+# ============================================
+
+index=ssh logon_type_name="Network(SSH)" auth_method="publickey"
+| table time, src_ip, user, action
+
+
+# ============================================
+# STEP 6: Final Verdict Summary Across All Source IPs
+# ============================================
+
+index=ssh
+| stats count(eval(signature_id=4625)) as failed_attempts, count(eval(signature_id=4624)) as successful_logins by src_ip, dest_nt_domain
+| eval verdict=if(failed_attempts>=5 AND successful_logins>0, "CONFIRMED COMPROMISE", if(failed_attempts>=5, "BRUTE-FORCE ATTEMPT - NO SUCCESS", "Normal/Low Volume"))
+| table src_ip, dest_nt_domain, failed_attempts, successful_logins, verdict
 
